@@ -1,0 +1,14 @@
+@import '_variables';
+@import 'modules/_reset';
+
+*, *::before, *::after {
+  box-sizing: border-box !important;
+}
+
+:root {
+ --color-general-dark: #1C1E26;
+}
+
+body {
+  color: var(--color-general-dark);
+}
