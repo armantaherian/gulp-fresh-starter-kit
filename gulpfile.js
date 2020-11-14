@@ -1,30 +1,24 @@
-var gulp = require('gulp');
-var browserSync = require('browser-sync');
-var sass = require('gulp-sass');
-var sourcemaps = require('gulp-sourcemaps');
-var autoprefixer = require('gulp-autoprefixer');
-var cleanCSS = require('gulp-clean-css');
-var uglify = require('gulp-uglify');
-var concat = require('gulp-concat');
-var imagemin = require('gulp-imagemin');
-var changed = require('gulp-changed');
-var htmlReplace = require('gulp-html-replace');
-var htmlMin = require('gulp-htmlmin');
-var del = require('del');
-var sequence = require('run-sequence');
-var babel = require('gulp-babel');
-var webpack = require('webpack-stream');
-var twig = require('gulp-twig');
+const { series, src, dest, watch, task } = require('gulp');
+const path = require('path');
+const rename = require('gulp-rename');
+const notify = require("gulp-notify");
+const browserSync = require('browser-sync');
+const sass = require('gulp-sass');
+const sourcemaps = require('gulp-sourcemaps');
+const cleanCSS = require('gulp-clean-css');
+const del = require('del');
+const webpack = require('webpack-stream');
+const twig = require('gulp-twig');
 
-var config = {
-  dist: 'dist/',
+const config = {
+  dist: path.join(__dirname, 'dist/'),
   src: './',
   cssin: 'src/css/**/*.css',
   jsin: 'src/js/**/*.js',
   imgin: 'src/img/**/*.{jpg,jpeg,png,gif}',
   htmlin: '*.html',
-  templateDir: 'templates/**/*.twig',
-  template: 'templates/*.twig',
+  templateDir: path.join(__dirname, 'templates/**/*.twig'),
+  template: path.join(__dirname, 'templates/*.twig'),
   scssin: 'src/scss/**/*.scss',
   cssout: 'dist/css/',
   jsout: 'dist/js/',
@@ -34,94 +28,77 @@ var config = {
   cssoutname: 'style.css',
   jsoutname: 'app.js',
   cssreplaceout: '/criticals.css',
-  jsreplaceout: '/dist/js/app.js'
+  jsreplaceout: '/dist/js/app.js',
+  htmlDir: path.join(__dirname, '**/*.html'),
+  assetsDir: path.join(__dirname, 'src/assets/**'),
+  assetsDist: path.join(__dirname, 'dist/assets/'),
 };
 
-gulp.task('reload', function() {
-  browserSync.reload();
+task('clean', function () {
+  return del([config.dist]);
 });
 
-gulp.task('serve', ['sass'], function() {
-  browserSync({
-    server: config.src,
-    open: false,
-    reloadOnRestart: true,
-  });
-
-  // gulp.watch([config.htmlin], ['reload']);
-  gulp.watch(config.scssin, ['sass']);
-  gulp.watch(config.jsin, ['js']);
-  gulp.watch(config.templateDir, ['html']);
+task('copy', function () {
+  return src(config.assetsDir)
+    .pipe(dest(config.assetsDist));
 });
 
-gulp.task('sass', function() {
-  return gulp.src(config.scssin)
+task('sass', function () {
+  return src(config.scssin)
     .pipe(sourcemaps.init())
-    .pipe(sass().on('error', sass.logError))
-    .pipe(autoprefixer({
-      browsers: ['last 3 versions']
+    .pipe(sass())
+    .on('error', notify.onError({
+      title: "Compiling Sass error",
+      message: "\n\n<%= error.message %>",
     }))
     .pipe(sourcemaps.write())
     .pipe(cleanCSS())
-    .pipe(gulp.dest(config.cssout))
+    .pipe(dest(config.cssout))
     .pipe(browserSync.stream());
 });
 
-// gulp.task('css', function() {
-//   console.log('hi')
-//   return gulp.src(config.cssin)
-//     // .pipe(concat(config.cssoutname))
-//     .pipe(cleanCSS())
-//     .pipe(gulp.dest(config.cssout))
-//     .pipe(browserSync.stream());
-// });
-
-gulp.task('js', function() {
-  return gulp.src(config.jsin)
-    // .pipe(concat(config.jsoutname))
-    // .pipe(uglify())
-    // .pipe(babel())
+task('js', function () {
+  return src(config.jsin)
+    .pipe(sourcemaps.init())
     .pipe(webpack({
       mode: 'production',
       output: {
         filename: 'app.js',
       },
     }))
-    .pipe(gulp.dest(config.jsout))
+    .pipe(rename({ extname: '.min.js' }))
+    .pipe(sourcemaps.write())
+    .pipe(dest(config.jsout))
     .pipe(browserSync.stream());
 });
 
-// gulp.task('img', function() {
-//   return gulp.src(config.imgin)
-//     .pipe(changed(config.imgout))
-//     .pipe(imagemin())
-//     .pipe(gulp.dest(config.imgout));
-// });
-
-gulp.task('html', function() {
-  // return gulp.src(config.htmlin)
-  return gulp.src(config.template)
+task('html', function () {
+  return src(config.template)
     .pipe(twig())
-    // .pipe(htmlReplace({
-    //   'css': config.cssreplaceout,
-    //   'js': config.jsreplaceout
-    // }))
-    // .pipe(htmlMin({
-    //   sortAttributes: true,
-    //   sortClassName: true,
-    //   collapseWhitespace: true
-    // }))
-    .pipe(gulp.dest(config.src))
+    .pipe(dest(config.dist))
     .pipe(browserSync.stream())
 });
 
-gulp.task('clean', function() {
-  return del([config.dist]);
-});
 
-gulp.task('build', function() {
-  // sequence('clean', ['html', 'js', 'css', 'img']);
-  sequence('clean', ['html', 'js', 'sass']);
-});
+task('serve', series('clean', 'copy', 'sass', 'js', 'html', function () {
+  browserSync({
+    server: config.dist,
+    open: false,
+    reloadOnRestart: true,
+  });
 
-gulp.task('default', ['serve']);
+  watch(config.scssin, series('sass'));
+  watch(config.jsin, series('js'));
+  // watch(config.templateDir, series('html'));
+
+  watch(config.templateDir, function (aa) {
+    console.log(aa)
+    return series('html');
+  });
+
+  watch(config.assetsDir, series('copy'));
+}));
+
+task('build', series('clean', 'html', 'js', 'sass'));
+
+task('default', series('serve'));
